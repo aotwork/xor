@@ -1,50 +1,46 @@
 #!/usr/bin/env python3
 
 from settings import default_key_path
+from exceptions import KeyFileError
 import parser
-import util
 import argparse
 import base64
 
 def decrypt(ciphertext, key):
-    bytearr = base64.b64decode(ciphertext)
-    message = ''
+    ciphertext = base64.b64decode(ciphertext).decode('utf-8')
+    msglen = len(ciphertext)
     keylen = len(key)
-    start = 0
-    end = 0
-    i = 0
-    while start < len(ciphertext):
-        (n, e, d) = key[i % keylen]
-        size = util.size(n)
-        end = start + size
-        block = bytearr[start:end]
-        cipher = int.from_bytes(block, byteorder='big')
-        codepoint = util.power_mod_n(cipher, d, n)
-        message += chr(codepoint)
-        i += 1
-        start += size
-    return message
+    ciphers = list(map(lambda x: ord(x), ciphertext))
+    message = [chr(ciphers[i] ^ key[i % keylen]) for i in range(msglen)]
+    return ''.join(message)
 
 def main():
-    argparser = argparse.ArgumentParser(prog='decrypt.py', description='Decrypt a message using the RSA algorithm')
-    group = argparser.add_mutually_exclusive_group(required=True)
+    arg_parser = argparse.ArgumentParser(prog='decrypt.py', description='Decrypt a message using the XOR algorithm')
+    group = arg_parser.add_mutually_exclusive_group(required=True)
     group.add_argument('ciphertext', type=str, nargs='?')
     group.add_argument('-i', '--inputfile', type=str)
-    argparser.add_argument('-k', '--keyfile', type=str, default=default_key_path)
-    argparser.add_argument('-o', '--outputfile', type=str)
-    args = argparser.parse_args()
+    arg_parser.add_argument('-k', '--keyfile', type=str, default=default_key_path)
+    arg_parser.add_argument('-o', '--outputfile', type=str)
+    args = arg_parser.parse_args()
+
     if args.inputfile:
-        with open(args.inputfile, 'rb') as file:
+        with open(args.inputfile, 'r') as file:
             ciphertext = file.read()
     else:
         ciphertext = args.ciphertext
-    key = parser.parse_key(args.keyfile)
-    msg = decrypt(ciphertext, key)
+
+    try:
+        key = parser.parse_key(args.keyfile)
+    except KeyFileError as err:
+        print(err)
+        return
+
+    plaintext = decrypt(ciphertext, key)
     if args.outputfile:
         with open(args.outputfile, 'w') as file:
-            file.write(msg)
+            file.write(plaintext)
     else:
-        print(msg, end='')
+        print(plaintext, end='')
 
 if __name__ == '__main__':
     main()
